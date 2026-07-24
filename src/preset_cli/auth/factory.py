@@ -72,9 +72,11 @@ def create_superset_auth(
 
     elif config.auth_method == "oauth":
         # An authorization URL selects the interactive browser (PKCE) flow, which
-        # needs no client secret or service credentials. Otherwise fall back to the
-        # non-interactive resource-owner password grant, which requires the full
-        # set of credentials. Each path reports exactly which fields are missing.
+        # needs no client secret or service credentials. Otherwise fall back to
+        # non-interactive OAuth2, which needs only token_url/client_id/client_secret
+        # for the client-credentials grant; oauth_username/oauth_password are an
+        # opt-in upgrade to the resource-owner password grant (see
+        # OAuthSupersetAuth._fetch_access_token) and are only required together.
         if config.oauth_authorization_url:
             missing = _missing_oauth_fields({"token_url": config.oauth_token_url})
             if missing:
@@ -91,13 +93,17 @@ def create_superset_auth(
                 token_type=config.oauth_token_type,
             )
 
+        if bool(config.oauth_username) != bool(config.oauth_password):
+            raise ValueError(
+                "OAuth2 resource-owner-password-grant configuration requires "
+                "both 'oauth_username' and 'oauth_password' to be set together."
+            )
+
         missing = _missing_oauth_fields(
             {
                 "token_url": config.oauth_token_url,
                 "client_id": config.oauth_client_id,
                 "client_secret": config.oauth_client_secret,
-                "username": config.oauth_username,
-                "password": config.oauth_password,
             },
         )
         if missing:

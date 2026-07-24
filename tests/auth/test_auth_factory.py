@@ -196,7 +196,7 @@ def test_factory_oauth_missing_multiple_fields():
         url="https://superset.example.com",
         auth_method="oauth",
         oauth_token_url="https://auth.example.com/token",
-        # Missing client_id, client_secret, username, password
+        # Missing client_id, client_secret
     )
 
     with pytest.raises(ValueError) as exc_info:
@@ -205,5 +205,42 @@ def test_factory_oauth_missing_multiple_fields():
     error_msg = str(exc_info.value)
     assert "client_id" in error_msg
     assert "client_secret" in error_msg
-    assert "username" in error_msg
-    assert "password" in error_msg
+
+
+def test_factory_creates_oauth_client_credentials_auth():
+    """Test factory creates OAuthSupersetAuth for client-credentials grant.
+
+    No oauth_username/oauth_password: mirrors ol_superset_deploy.py's Concourse
+    pipeline config, which only supplies client_id/client_secret.
+    """
+    config = SupersetInstanceConfig(
+        url="https://superset.example.com",
+        auth_method="oauth",
+        oauth_token_url="https://auth.example.com/token",
+        oauth_client_id="client-123",
+        oauth_client_secret="secret-456",
+    )
+
+    with patch("preset_cli.auth.oauth_superset.OAuthSupersetAuth.auth"):
+        auth = create_superset_auth(config)
+
+    assert isinstance(auth, OAuthSupersetAuth)
+    assert auth.client_id == "client-123"
+    assert auth.username is None
+    assert auth.password is None
+
+
+def test_factory_oauth_rejects_partial_ropc_credentials():
+    """Test factory rejects oauth_username set without oauth_password."""
+    config = SupersetInstanceConfig(
+        url="https://superset.example.com",
+        auth_method="oauth",
+        oauth_token_url="https://auth.example.com/token",
+        oauth_client_id="client-123",
+        oauth_client_secret="secret-456",
+        oauth_username="service@example.com",
+        # Missing oauth_password
+    )
+
+    with pytest.raises(ValueError, match="requires both 'oauth_username' and 'oauth_password'"):
+        create_superset_auth(config)
